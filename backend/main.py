@@ -6,7 +6,6 @@ import os
 
 app = FastAPI()
 
-# Allow your React app to talk to this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"], # Frontend URL
@@ -16,18 +15,15 @@ app.add_middleware(
 )
 
 DB_PATH = "ratings.db"
-# Updated SOLUTIONS_DIR to point to the new path
-# Resolve to an absolute path to make comparisons more reliable
+
+# Note: This is the path to the solutions directory on my machine.
 SOLUTIONS_DIR = Path(__file__).resolve().parent / "../../leetcode/python"
 
-# Create ratings table on startup
+# Startup functions
 @app.on_event("startup")
 def init_db():
-    # Ensure the target directory for solutions is handled robustly
-    # For a linked repository, it\'s better to assume it exists.
-    # However, creating the DB file if it\'s not there is fine.
     db_parent_dir = Path(DB_PATH).parent
-    if db_parent_dir != Path("."): # If DB_PATH includes a directory
+    if db_parent_dir != Path("."):
         os.makedirs(db_parent_dir, exist_ok=True)
 
     conn = sqlite3.connect(DB_PATH)
@@ -42,6 +38,7 @@ def init_db():
         print(f"WARNING: SOLUTIONS_DIR ({SOLUTIONS_DIR.resolve()}) does not exist or is not a directory.")
 
 
+# Get all solutions
 @app.get("/solutions")
 def list_solutions():
     conn = sqlite3.connect(DB_PATH)
@@ -51,11 +48,10 @@ def list_solutions():
     if not SOLUTIONS_DIR.is_dir():
         print(f"Error: SOLUTIONS_DIR ({SOLUTIONS_DIR.resolve()}) is not a directory or does not exist.")
         conn.close()
-        return [] # Return empty list if solutions directory is not valid
+        return files
 
-    # Use rglob for recursive search
+    # Search
     for file_path in SOLUTIONS_DIR.rglob("*.py"):
-        # Store filename as path relative to SOLUTIONS_DIR
         relative_filename = str(file_path.relative_to(SOLUTIONS_DIR))
         cursor.execute("SELECT rating FROM ratings WHERE filename = ?", (relative_filename,))
         row = cursor.fetchone()
@@ -67,7 +63,7 @@ def list_solutions():
     conn.close()
     return files
 
-# Use :path to allow slashes in the filename, as it\'s now a relative path
+# Get a solution
 @app.get("/solutions/{filename:path}")
 def get_solution(filename: str):
     try:
@@ -83,32 +79,29 @@ def get_solution(filename: str):
     all_lines = full_path.read_text().splitlines()
     
     description_lines = []
-    code_block_lines = []
+    code_lines = []
     complexity_lines = []
     
     first_code_line_index = -1
     last_code_line_index = -1
 
-    # Pass 1: Identify description and first code line
+    # Identify description and first code line
     for i, line in enumerate(all_lines):
         stripped_line = line.lstrip()
         if stripped_line.startswith("#"):
-            if first_code_line_index == -1: # Still in description phase
+            if first_code_line_index == -1:
                 description_lines.append(stripped_line.lstrip("#").lstrip(" "))
-            else: # Comment after first code line, potential part of code or later complexity
-                pass # Handled in next passes
-        elif stripped_line: # Not a comment and not empty
+            else:
+                pass
+        elif stripped_line:
             if first_code_line_index == -1:
                 first_code_line_index = i
-            # This line is part of the broader code/complexity block
-        # Empty lines are ignored for determining first/last code line but preserved based on context
 
-    # If no code lines found, all comments are description, no code, no complexity
+    # If no code lines found
     if first_code_line_index == -1:
-        code_lines_final = []
-        # All non-empty lines were comments, so they are in description_lines
+        code_lines = []
     else:
-        # Pass 2: Identify last code line from the block starting at first_code_line_index
+        # Identify last code line from the block starting at first_code_line_index
         potential_code_and_complexity_lines = all_lines[first_code_line_index:]
         current_last_code_line_block_index = -1
         for i, line in enumerate(potential_code_and_complexity_lines):
@@ -116,17 +109,16 @@ def get_solution(filename: str):
                 current_last_code_line_block_index = i
         
         if current_last_code_line_block_index == -1: # All remaining lines are comments
-            code_lines_final = []
+            code_lines = []
             for line in potential_code_and_complexity_lines:
-                 # These are comments after where code was expected, treat as complexity if not empty
                  stripped_line = line.lstrip()
                  if stripped_line.startswith("#"):
                     complexity_lines.append(stripped_line.lstrip("#").lstrip(" "))
         else:
             last_code_line_index = first_code_line_index + current_last_code_line_block_index
-            code_lines_final = all_lines[first_code_line_index : last_code_line_index + 1]
+            code_lines = all_lines[first_code_line_index : last_code_line_index + 1]
             
-            # Pass 3: Collect complexity lines (comments after the last code line)
+            # Collect complexity lines (comments after the last code line)
             if last_code_line_index + 1 < len(all_lines):
                 for line in all_lines[last_code_line_index + 1 :]:
                     stripped_line = line.lstrip()
@@ -135,11 +127,12 @@ def get_solution(filename: str):
                     # We ignore non-comment lines after the identified code block for complexity
 
     description = "\n".join(description_lines)
-    code = "\n".join(code_lines_final)
+    code = "\n".join(code_lines)
     complexity = "\n".join(complexity_lines)
 
     return {"filename": filename, "description": description, "code": code, "complexity": complexity}
 
+# post a rating
 @app.post("/ratings")
 def save_rating(data: dict):
     filename = data.get("filename") # filename should be the relative path
@@ -148,7 +141,7 @@ def save_rating(data: dict):
     if not filename or not isinstance(filename, str) or not isinstance(rating, int) or not (1 <= rating <= 5) :
         return {"error": "Invalid input: filename must be a string, rating an integer between 1-5."}
 
-    # Validate that the filename received corresponds to an actual file within SOLUTIONS_DIR
+    # Validate filename received
     try:
         full_path = (SOLUTIONS_DIR / filename).resolve(strict=True)
         if not full_path.is_relative_to(SOLUTIONS_DIR.resolve(strict=True)):
@@ -170,8 +163,5 @@ def save_rating(data: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    # This is for running the backend directly for development/testing if needed
-    # Ensure SOLUTIONS_DIR is correctly set relative to this script\'s location if run this way.
-    # For Docker, the paths are relative to the container\'s /app directory.
     print(f"Starting Uvicorn server. Solutions directory: {SOLUTIONS_DIR.resolve()}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
