@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Prevent node_modules from being overwritten by the host
+    environment:
+      - WATCHPACK_POLLING=true # For HMR through Docker on some systems
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Prevent node_modules from being overwritten by the host
+      - /Users/alexanderardalan/Documents/leetcode/python:/leetcode/python # Map local solutions to container
+    environment:
+      - WATCHPACK_POLLING=true # For HMR through Docker on some systems
+    # If your backend depends on other services (like a database),
+    # you can add a `depends_on` section here.
+    # depends_on:
+    #   - db 
