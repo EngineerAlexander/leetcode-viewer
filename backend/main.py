@@ -82,6 +82,14 @@ def get_solution(filename: str):
     code_lines = []
     complexity_lines = []
     
+    # Generate source_link from filename
+    base_filename_str = Path(filename).name
+    if base_filename_str.endswith(".py"):
+        slug = base_filename_str[:-3] # Equivalent to .removesuffix('.py')
+        source_link = f"https://leetcode.com/problems/{slug}/"
+    else:
+        source_link = None
+    
     first_code_line_index = -1
     last_code_line_index = -1
 
@@ -94,23 +102,22 @@ def get_solution(filename: str):
             else:
                 pass
         elif stripped_line:
-            if first_code_line_index == -1:
+            if first_code_line_index == -1: # This is the first actual code line
                 first_code_line_index = i
-
-    # If no code lines found
+    
+    # If no code lines found (e.g., file is all comments or empty after comments)
     if first_code_line_index == -1:
         code_lines = []
     else:
         # Identify last code line from the block starting at first_code_line_index
         potential_code_and_complexity_lines = all_lines[first_code_line_index:]
         current_last_code_line_block_index = -1
-        for i, line in enumerate(potential_code_and_complexity_lines):
-            if line.lstrip() and not line.lstrip().startswith("#"):
-                current_last_code_line_block_index = i
+        for idx, line_in_block in enumerate(potential_code_and_complexity_lines):
+            if line_in_block.lstrip() and not line_in_block.lstrip().startswith("#"):
+                current_last_code_line_block_index = idx
         
-        if current_last_code_line_block_index == -1: # All remaining lines are comments
-            code_lines = []
-            for line in potential_code_and_complexity_lines:
+        if current_last_code_line_block_index == -1: 
+             for line in potential_code_and_complexity_lines:
                  stripped_line = line.lstrip()
                  if stripped_line.startswith("#"):
                     complexity_lines.append(stripped_line.lstrip("#").lstrip(" "))
@@ -124,13 +131,12 @@ def get_solution(filename: str):
                     stripped_line = line.lstrip()
                     if stripped_line.startswith("#"):
                         complexity_lines.append(stripped_line.lstrip("#").lstrip(" "))
-                    # We ignore non-comment lines after the identified code block for complexity
 
     description = "\n".join(description_lines)
     code = "\n".join(code_lines)
     complexity = "\n".join(complexity_lines)
 
-    return {"filename": filename, "description": description, "code": code, "complexity": complexity}
+    return {"filename": filename, "description": description, "code": code, "complexity": complexity, "source_link": source_link}
 
 # post a rating
 @app.post("/ratings")
