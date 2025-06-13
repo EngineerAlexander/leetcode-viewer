@@ -139,7 +139,7 @@ function ProblemExplorer() {
 
     const weightedSolutions = solutions.map(sol => ({
       ...sol,
-      weight: sol.rating ? Math.max(1, sol.rating) : 3
+      weight: sol.rating ? Math.max(1, sol.rating) : 5
     }));
 
     const totalWeight = weightedSolutions.reduce((sum, sol) => sum + sol.weight, 0);
