@@ -29,6 +29,7 @@ interface FileContentData {
   complexity?: string;
   filename?: string;
   source_link?: string;
+  youtube_link?: string;
 }
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -56,6 +57,7 @@ function ProblemExplorer() {
   const [selectedFileComplexity, setSelectedFileComplexity] = useState<string>('');
   const [selectedFileRating, setSelectedFileRating] = useState<number | null>(null);
   const [selectedFileSourceLink, setSelectedFileSourceLink] = useState<string | null>(null);
+  const [selectedFileYoutubeLink, setSelectedFileYoutubeLink] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [contentLoading, setContentLoading] = useState<boolean>(false);
@@ -93,6 +95,7 @@ function ProblemExplorer() {
     setSelectedFileComplexity('');
     setSelectedFileRating(null);
     setSelectedFileSourceLink(null);
+    setSelectedFileYoutubeLink(null);
     setContentLoading(true);
     setContentError(null);
     try {
@@ -112,6 +115,7 @@ function ProblemExplorer() {
       setSelectedFileCode(data.code || '// No code found or file is empty.');
       setSelectedFileComplexity(data.complexity || '');
       setSelectedFileSourceLink(data.source_link || null);
+      setSelectedFileYoutubeLink(data.youtube_link || null);
       const originalSolution = solutions.find(s => s.filename === filePath);
       setSelectedFileRating(originalSolution?.rating || null);
     } catch (e: any) {
@@ -121,6 +125,7 @@ function ProblemExplorer() {
       setSelectedFileCode(`// Error loading code: ${e.message}`);
       setSelectedFileComplexity(`// Error loading complexity: ${e.message}`);
       setSelectedFileSourceLink(null);
+      setSelectedFileYoutubeLink(null);
     }
     setContentLoading(false);
   }, [solutions]);
@@ -231,6 +236,16 @@ function ProblemExplorer() {
                       className="mr-3 px-3 py-1 text-xs font-medium text-amber-700 bg-amber-300 hover:bg-amber-400 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors"
                     >
                       Open Problem Link
+                    </a>
+                  )}
+                  {selectedFileYoutubeLink && (
+                    <a
+                      href={selectedFileYoutubeLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mr-3 px-3 py-1 text-xs font-medium text-red-700 bg-red-300 hover:bg-red-400 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                    >
+                      Search YouTube
                     </a>
                   )}
                   {groupTitle && (
