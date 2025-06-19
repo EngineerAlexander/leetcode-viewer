@@ -22,7 +22,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules # Prevent node_modules from being overwritten by the host
-      - /Users/alexanderardalan/Documents/leetcode/python:/leetcode/python # Map local solutions to container
+      - /Users/alexanderardalan/Documents/leetcode:/leetcode # Map entire leetcode directory to container
     environment:
       - WATCHPACK_POLLING=true # For HMR through Docker on some systems
     # If your backend depends on other services (like a database),

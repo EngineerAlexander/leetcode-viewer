@@ -16,8 +16,8 @@ app.add_middleware(
 
 DB_PATH = "ratings.db"
 
-# Note: This is the path to the solutions directory on my machine.
-SOLUTIONS_DIR = Path(__file__).resolve().parent / "../../leetcode/python"
+# Note: This is the path to the leetcode directory on my machine.
+LEETCODE_DIR = Path(__file__).resolve().parent / "../../leetcode"
 
 # Startup functions
 @app.on_event("startup")
@@ -33,26 +33,64 @@ def init_db():
     conn.commit()
     conn.close()
     print(f"Database initialized at {Path(DB_PATH).resolve()}")
-    print(f"Solutions will be read from: {SOLUTIONS_DIR.resolve()}")
-    if not SOLUTIONS_DIR.exists() or not SOLUTIONS_DIR.is_dir():
-        print(f"WARNING: SOLUTIONS_DIR ({SOLUTIONS_DIR.resolve()}) does not exist or is not a directory.")
+    print(f"LeetCode directory: {LEETCODE_DIR.resolve()}")
+    if not LEETCODE_DIR.exists() or not LEETCODE_DIR.is_dir():
+        print(f"WARNING: LEETCODE_DIR ({LEETCODE_DIR.resolve()}) does not exist or is not a directory.")
 
+# Get available languages (top-level folders)
+@app.get("/languages")
+def get_languages():
+    if not LEETCODE_DIR.exists() or not LEETCODE_DIR.is_dir():
+        return []
+    
+    languages = []
+    for item in LEETCODE_DIR.iterdir():
+        if item.is_dir() and item.name not in ['.git', 'media', '.vscode']:
+            languages.append({
+                "name": item.name.title(),
+                "value": item.name,
+                "icon": get_language_icon(item.name)
+            })
+    
+    return languages
 
-# Get all solutions
-@app.get("/solutions")
-def list_solutions():
+def get_language_icon(language: str) -> str:
+    """Return appropriate icon for each language"""
+    icons = {
+        "python": "🐍",
+        "typescript": "🔷", 
+        "c++": "⚡",
+        "rust": "🦀"
+    }
+    return icons.get(language.lower(), "📁")
+
+# Get all solutions for a specific language
+@app.get("/solutions/{language}")
+def list_solutions(language: str):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    files = []
-    if not SOLUTIONS_DIR.is_dir():
-        print(f"Error: SOLUTIONS_DIR ({SOLUTIONS_DIR.resolve()}) is not a directory or does not exist.")
+    # Validate language directory exists
+    language_dir = LEETCODE_DIR / language
+    if not language_dir.exists() or not language_dir.is_dir():
         conn.close()
-        return files
+        return {"error": f"Language directory '{language}' not found"}
 
-    # Search
-    for file_path in SOLUTIONS_DIR.rglob("*.py"):
-        relative_filename = str(file_path.relative_to(SOLUTIONS_DIR))
+    files = []
+    
+    # Determine file extension based on language
+    file_extensions = {
+        "python": "*.py",
+        "typescript": "*.ts",
+        "c++": "*.cpp",
+        "rust": "*.rs"
+    }
+    
+    extension = file_extensions.get(language.lower(), "*")
+    
+    # Search for files with appropriate extension
+    for file_path in language_dir.rglob(extension):
+        relative_filename = str(file_path.relative_to(language_dir))
         cursor.execute("SELECT rating FROM ratings WHERE filename = ?", (relative_filename,))
         row = cursor.fetchone()
         files.append({
@@ -63,12 +101,17 @@ def list_solutions():
     conn.close()
     return files
 
-# Get a solution
-@app.get("/solutions/{filename:path}")
-def get_solution(filename: str):
+# Get a solution for a specific language
+@app.get("/solutions/{language}/{filename:path}")
+def get_solution(language: str, filename: str):
+    # Validate language directory exists
+    language_dir = LEETCODE_DIR / language
+    if not language_dir.exists() or not language_dir.is_dir():
+        return {"error": f"Language directory '{language}' not found"}
+
     try:
-        full_path = (SOLUTIONS_DIR / filename).resolve(strict=True)
-        if not full_path.is_relative_to(SOLUTIONS_DIR.resolve(strict=True)):
+        full_path = (language_dir / filename).resolve(strict=True)
+        if not full_path.is_relative_to(language_dir.resolve(strict=True)):
              raise ValueError("Attempted path traversal")
     except (ValueError, FileNotFoundError):
         return {"error": "Invalid or non-existent file path."}
@@ -84,8 +127,16 @@ def get_solution(filename: str):
     
     # Generate source_link from filename
     base_filename_str = Path(filename).name
-    if base_filename_str.endswith(".py"):
-        slug = base_filename_str[:-3] # Equivalent to .removesuffix('.py')
+    file_extensions = {
+        "python": ".py",
+        "typescript": ".ts", 
+        "c++": ".cpp",
+        "rust": ".rs"
+    }
+    
+    extension = file_extensions.get(language.lower(), "")
+    if base_filename_str.endswith(extension):
+        slug = base_filename_str[:-len(extension)] # Remove extension
         source_link = f"https://leetcode.com/problems/{slug}/"
         # Replace hyphens with spaces and properly encode the URL
         search_query = slug.replace('-', ' ') + ' Leetcode'
@@ -151,17 +202,8 @@ def save_rating(data: dict):
     if not filename or not isinstance(filename, str) or not isinstance(rating, int) or not (1 <= rating <= 5) :
         return {"error": "Invalid input: filename must be a string, rating an integer between 1-5."}
 
-    # Validate filename received
-    try:
-        full_path = (SOLUTIONS_DIR / filename).resolve(strict=True)
-        if not full_path.is_relative_to(SOLUTIONS_DIR.resolve(strict=True)):
-            raise ValueError("Attempted path traversal")
-    except (ValueError, FileNotFoundError):
-        return {"error": "File to rate does not exist or path is invalid."}
-
-    if not full_path.is_file():
-         return {"error": "Target is not a file."}
-
+    # For now, we'll keep the rating system simple and assume it's for the current language
+    # In the future, we might want to include language in the rating key
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT OR REPLACE INTO ratings (filename, rating) VALUES (?, ?)",
@@ -173,5 +215,5 @@ def save_rating(data: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    print(f"Starting Uvicorn server. Solutions directory: {SOLUTIONS_DIR.resolve()}")
+    print(f"Starting Uvicorn server. LeetCode directory: {LEETCODE_DIR.resolve()}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
