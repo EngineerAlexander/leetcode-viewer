@@ -64,6 +64,7 @@ function ProblemExplorer() {
   const [contentError, setContentError] = useState<string | null>(null);
   const [expandedFolderPath, setExpandedFolderPath] = useState<string | null>(null);
   const [showProblemGroup, setShowProblemGroup] = useState<boolean>(false);
+  const [selectedRatingFilter, setSelectedRatingFilter] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchSolutionsList() {
@@ -142,7 +143,15 @@ function ProblemExplorer() {
   const handleRandomProblemSelect = () => {
     if (solutions.length === 0) return;
 
-    const weightedSolutions = solutions.map(sol => ({
+    // Filter solutions based on selected rating filter
+    let filteredSolutions = solutions;
+    if (selectedRatingFilter !== null) {
+      filteredSolutions = solutions.filter(sol => sol.rating === selectedRatingFilter);
+    }
+
+    if (filteredSolutions.length === 0) return;
+
+    const weightedSolutions = filteredSolutions.map(sol => ({
       ...sol,
       weight: sol.rating ? Math.max(1, sol.rating) : 5
     }));
@@ -164,6 +173,10 @@ function ProblemExplorer() {
     if (chosenSolution) {
       handleFileSelect(chosenSolution.filename);
     }
+  };
+
+  const handleRatingFilterClick = (rating: number | null) => {
+    setSelectedRatingFilter(prevRating => prevRating === rating ? null : rating);
   };
 
   const handleFolderToggle = (folderPath: string) => {
@@ -202,6 +215,34 @@ function ProblemExplorer() {
           >
             Pick Random Problem
           </button>
+        </div>
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-stone-300 dark:text-stone-400 mb-2">Filter by Rating:</h3>
+          <div className="flex flex-wrap gap-1">
+            {[1, 2, 3, 4, 5].map((rating) => (
+              <button
+                key={rating}
+                onClick={() => handleRatingFilterClick(rating)}
+                className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                  selectedRatingFilter === rating
+                    ? 'bg-amber-500 text-stone-900'
+                    : 'bg-stone-600 text-stone-300 hover:bg-stone-500'
+                }`}
+              >
+                {rating}★
+              </button>
+            ))}
+            <button
+              onClick={() => handleRatingFilterClick(null)}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                selectedRatingFilter === null
+                  ? 'bg-amber-500 text-stone-900'
+                  : 'bg-stone-600 text-stone-300 hover:bg-stone-500'
+              }`}
+            >
+              All
+            </button>
+          </div>
         </div>
         <h2 className="text-2xl font-semibold mb-4 text-stone-100 dark:text-stone-50 border-b border-stone-600 dark:border-stone-700 pb-3">Problems</h2>
         <div className="overflow-y-auto flex-grow pr-2 scrollbar-thin scrollbar-thumb-stone-500 scrollbar-track-stone-700 dark:scrollbar-thumb-stone-600 dark:scrollbar-track-stone-800">
