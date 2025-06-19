@@ -87,8 +87,12 @@ def get_solution(filename: str):
     if base_filename_str.endswith(".py"):
         slug = base_filename_str[:-3] # Equivalent to .removesuffix('.py')
         source_link = f"https://leetcode.com/problems/{slug}/"
+        # Replace hyphens with spaces and properly encode the URL
+        search_query = slug.replace('-', ' ') + ' Leetcode'
+        youtube_link = f"https://www.youtube.com/results?search_query={search_query.replace(' ', '+')}"
     else:
         source_link = None
+        youtube_link = None
     
     first_code_line_index = -1
     last_code_line_index = -1
@@ -136,7 +140,7 @@ def get_solution(filename: str):
     code = "\n".join(code_lines)
     complexity = "\n".join(complexity_lines)
 
-    return {"filename": filename, "description": description, "code": code, "complexity": complexity, "source_link": source_link}
+    return {"filename": filename, "description": description, "code": code, "complexity": complexity, "source_link": source_link, "youtube_link": youtube_link}
 
 # post a rating
 @app.post("/ratings")
