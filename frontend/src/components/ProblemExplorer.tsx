@@ -32,13 +32,26 @@ interface FileContentData {
   youtube_link?: string;
 }
 
+interface ProblemExplorerProps {
+  selectedLanguage: string;
+}
+
 const API_BASE_URL = 'http://localhost:8000';
 
 // Helper function to format titles
-const formatDisplayPath = (filePath: string | null) => {
+const formatDisplayPath = (filePath: string | null, language: string) => {
   if (!filePath) return { mainTitle: '', groupTitle: '' };
 
-  const parts = filePath.replace(/\.py$/, '').split('/');
+  // Determine file extension based on language
+  const fileExtensions = {
+    "python": ".py",
+    "typescript": ".ts",
+    "c++": ".cpp",
+    "rust": ".rs"
+  };
+  
+  const extension = fileExtensions[language.toLowerCase() as keyof typeof fileExtensions] || ".py";
+  const parts = filePath.replace(new RegExp(`\\${extension}$`), '').split('/');
   const fileNameRaw = parts.pop() || '';
   const groupPathRaw = parts.join(' ');
 
@@ -48,7 +61,7 @@ const formatDisplayPath = (filePath: string | null) => {
   return { mainTitle, groupTitle };
 };
 
-function ProblemExplorer() {
+function ProblemExplorer({ selectedLanguage }: ProblemExplorerProps) {
   const [solutions, setSolutions] = useState<SolutionFile[]>([]);
   const [fileTree, setFileTree] = useState<TreeNode[]>([]);
   const [selectedFileRelativePath, setSelectedFileRelativePath] = useState<string | null>(null);
@@ -65,13 +78,14 @@ function ProblemExplorer() {
   const [expandedFolderPath, setExpandedFolderPath] = useState<string | null>(null);
   const [showProblemGroup, setShowProblemGroup] = useState<boolean>(false);
   const [selectedRatingFilter, setSelectedRatingFilter] = useState<number | null>(null);
+  const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function fetchSolutionsList() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/solutions`);
+        const response = await fetch(`${API_BASE_URL}/solutions/${selectedLanguage}`);
         if (!response.ok) {
           const errorData = await response.text();
           throw new Error(`Solution List HTTP error! status: ${response.status} - ${errorData}`);
@@ -79,6 +93,14 @@ function ProblemExplorer() {
         const data: SolutionFile[] = await response.json();
         setSolutions(data);
         setFileTree(buildFileTree(data));
+        // Clear selected file when language changes
+        setSelectedFileRelativePath(null);
+        setSelectedFileDescription('');
+        setSelectedFileCode('');
+        setSelectedFileComplexity('');
+        setSelectedFileRating(null);
+        setSelectedFileSourceLink(null);
+        setSelectedFileYoutubeLink(null);
       } catch (e: any) {
         console.error("Failed to fetch solutions list:", e);
         setError(e.message);
@@ -86,7 +108,7 @@ function ProblemExplorer() {
       setLoading(false);
     }
     fetchSolutionsList();
-  }, []);
+  }, [selectedLanguage]);
 
   const handleFileSelect = useCallback(async (filePath: string) => {
     if (!filePath) return;
@@ -100,7 +122,7 @@ function ProblemExplorer() {
     setContentLoading(true);
     setContentError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/solutions/${encodeURIComponent(filePath)}`);
+      const response = await fetch(`${API_BASE_URL}/solutions/${selectedLanguage}/${encodeURIComponent(filePath)}`);
       if (!response.ok) {
         let errorDetail = `File Content HTTP error! status: ${response.status}`;
         try {
@@ -129,7 +151,7 @@ function ProblemExplorer() {
       setSelectedFileYoutubeLink(null);
     }
     setContentLoading(false);
-  }, [solutions]);
+  }, [solutions, selectedLanguage]);
 
   const handleRatingSubmitted = (newRatingData: RatingData) => {
     setSelectedFileRating(newRatingData.rating);
@@ -143,10 +165,22 @@ function ProblemExplorer() {
   const handleRandomProblemSelect = () => {
     if (solutions.length === 0) return;
 
-    // Filter solutions based on selected rating filter
+    // Filter solutions based on selected rating filter and folders
     let filteredSolutions = solutions;
+    
+    // Filter by rating
     if (selectedRatingFilter !== null) {
-      filteredSolutions = solutions.filter(sol => sol.rating === selectedRatingFilter);
+      filteredSolutions = filteredSolutions.filter(sol => sol.rating === selectedRatingFilter);
+    }
+    
+    // Filter by selected folders
+    if (selectedFolders.size > 0) {
+      filteredSolutions = filteredSolutions.filter(sol => {
+        const filePath = sol.filename;
+        return Array.from(selectedFolders).some(folderPath => 
+          filePath.startsWith(folderPath + '/') || filePath === folderPath
+        );
+      });
     }
 
     if (filteredSolutions.length === 0) return;
@@ -179,12 +213,44 @@ function ProblemExplorer() {
     setSelectedRatingFilter(prevRating => prevRating === rating ? null : rating);
   };
 
+  const handleFolderSelect = (folderPath: string, isSelected: boolean) => {
+    setSelectedFolders(prev => {
+      const newSet = new Set(prev);
+      if (isSelected) {
+        newSet.add(folderPath);
+      } else {
+        newSet.delete(folderPath);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const allFolders = new Set<string>();
+    const collectFolders = (nodes: TreeNode[]) => {
+      nodes.forEach(node => {
+        if (node.type === 'folder') {
+          allFolders.add(node.path);
+          if (node.children) {
+            collectFolders(node.children);
+          }
+        }
+      });
+    };
+    collectFolders(fileTree);
+    setSelectedFolders(allFolders);
+  };
+
+  const handleClearAll = () => {
+    setSelectedFolders(new Set());
+  };
+
   const handleFolderToggle = (folderPath: string) => {
     setExpandedFolderPath(prevPath => (prevPath === folderPath ? null : folderPath));
   };
 
   // Derive display titles
-  const { mainTitle, groupTitle } = formatDisplayPath(selectedFileRelativePath);
+  const { mainTitle, groupTitle } = formatDisplayPath(selectedFileRelativePath, selectedLanguage);
 
   if (loading) {
     return (
@@ -244,6 +310,23 @@ function ProblemExplorer() {
             </button>
           </div>
         </div>
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-stone-300 dark:text-stone-400 mb-2">Folder Selection:</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSelectAll}
+              className="px-3 py-1 text-xs font-medium bg-amber-500 text-stone-900 rounded hover:bg-amber-600 transition-colors"
+            >
+              Select All
+            </button>
+            <button
+              onClick={handleClearAll}
+              className="px-3 py-1 text-xs font-medium bg-stone-600 text-stone-300 rounded hover:bg-stone-500 transition-colors"
+            >
+              Clear All
+            </button>
+          </div>
+        </div>
         <h2 className="text-2xl font-semibold mb-4 text-stone-100 dark:text-stone-50 border-b border-stone-600 dark:border-stone-700 pb-3">Problems</h2>
         <div className="overflow-y-auto flex-grow pr-2 scrollbar-thin scrollbar-thumb-stone-500 scrollbar-track-stone-700 dark:scrollbar-thumb-stone-600 dark:scrollbar-track-stone-800">
           {fileTree.length > 0 ? (
@@ -254,6 +337,8 @@ function ProblemExplorer() {
                 onFileSelect={handleFileSelect} 
                 expandedFolderPath={expandedFolderPath}
                 onFolderToggle={handleFolderToggle}
+                selectedFolders={selectedFolders}
+                onFolderSelect={handleFolderSelect}
               />
             ))
           ) : (
@@ -318,7 +403,7 @@ function ProblemExplorer() {
 
               <div className="bg-stone-800 dark:bg-black/40 flex-grow code-block-container">
                 <SyntaxHighlighter
-                  language="python"
+                  language={selectedLanguage === 'c++' ? 'cpp' : selectedLanguage}
                   style={vscDarkPlus}
                   PreTag="div"
                   className="h-full w-full text-sm p-5 leading-relaxed selection:bg-amber-300 selection:text-black scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-stone-800"
@@ -358,7 +443,7 @@ function ProblemExplorer() {
               <path d="M7.5 4.5V3m9 1.5V3" />
             </svg>
             <h3 className="text-2xl font-semibold text-stone-200 dark:text-stone-300 mb-2">Select a Problem</h3>
-            <p className="text-stone-400 dark:text-stone-500">Choose a Python file from the list on the left to view its content and rating.</p>
+            <p className="text-stone-400 dark:text-stone-500">Choose a {selectedLanguage} file from the list on the left to view its content and rating.</p>
           </div>
         )}
       </div>
